@@ -25,22 +25,12 @@ jobs:
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
-            <!-- 替换 deprecated 的 "development" 为 "debugging" -->
             <key>method</key>
-            <string>debugging</string>
-            
-            <key>provisioningProfiles</key>
-            <dict/>
-            
+            <string>ad-hoc</string> <!-- 替换为ad-hoc，无需团队 -->
             <key>signingStyle</key>
-            <string>manual</string>
-            
+            <string>manual</string> <!-- 手动签名（实际不签名） -->
             <key>stripSwiftSymbols</key>
             <true/>
-            
-            <key>thinning</key>
-            <string>&lt;none&gt;</string>
-            
             <key>uploadBitcode</key>
             <false/>
             <key>uploadSymbols</key>
