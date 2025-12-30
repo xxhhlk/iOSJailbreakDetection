@@ -1,60 +1,29 @@
 name: Build Unsigned IPA for Jailbroken Devices
 
 on:
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-14  # 使用 macOS Sonoma (最新稳定版)
+    runs-on: macos-14
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
     
     - name: 设置 Xcode 版本
-      run: |
-        # 列出可用的 Xcode 版本
-        ls /Applications | grep Xcode
-        # 使用默认的最新版本（支持 iOS 17）
-        sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
     
-    - name: 创建导出配置（修复teamID和deprecated问题）
-      run: |
-        cat > exportOptions.plist << 'EOF'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>method</key>
-            <string>ad-hoc</string> <!-- 替换为ad-hoc，无需团队 -->
-            <key>signingStyle</key>
-            <string>manual</string> <!-- 手动签名（实际不签名） -->
-            <key>stripSwiftSymbols</key>
-            <true/>
-            <key>uploadBitcode</key>
-            <false/>
-            <key>uploadSymbols</key>
-            <false/>
-            <key>compileBitcode</key>
-            <false/>
-        </dict>
-        </plist>
-        EOF
-        cat exportOptions.plist  # 打印配置确认
+    - name: 安装辅助工具 (ldid)
+      # ldid 是越狱开发常用的伪签名工具，防止应用因权限问题闪退
+      run: brew install ldid
 
-    
     - name: 清理构建目录
       run: rm -rf build
-    
-    - name: 构建 iOS 应用 (arm64)
+
+    - name: 生成归档 (Archive)
+      # 这一步你之前成功了，我们保持不变
       run: |
-        # 先 clean
-        xcodebuild clean \
-          -project "iOSJailbreakDetection.xcodeproj" \
-          -scheme "iOSJailbreakDetection" \
-          -configuration Release
-        
-        # 构建归档
         xcodebuild archive \
           -project "iOSJailbreakDetection.xcodeproj" \
           -scheme "iOSJailbreakDetection" \
@@ -64,47 +33,35 @@ jobs:
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
-          ENABLE_BITCODE=NO
-        
-        # 导出未签名的 IPA
-        xcodebuild -exportArchive \
-          -archivePath "$PWD/build/iOSJailbreakDetection.xcarchive" \
-          -exportOptionsPlist "$PWD/exportOptions.plist" \
-          -exportPath "$PWD/build" \
-          CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO
-    
-    - name: 验证生成的 IPA
+          AD_HOC_CODE_SIGNING_ALLOWED=YES
+
+    - name: 手动打包 IPA (核心修复步骤)
       run: |
         cd build
-        ls -la
-        echo "=== 生成的 IPA 文件 ==="
-        find . -name "*.ipa" -type f
-        echo "=== IPA 文件信息 ==="
-        for ipa in *.ipa; do
-          echo "文件: $ipa"
-          unzip -l "$ipa" | grep Payload | head -5
-        done
-    
+        
+        # 1. 创建标准的 Payload 目录结构
+        mkdir Payload
+        
+        # 2. 从归档文件中提取 .app 包到 Payload
+        cp -r "iOSJailbreakDetection.xcarchive/Products/Applications/iOSJailbreakDetection.app" Payload/
+        
+        # 3. (可选但推荐) 使用 ldid 进行伪签名
+        # 这有助于解决某些越狱环境下的 entitlements 权限问题
+        # -S 表示伪签名，不带参数表示仅计算哈希
+        ldid -S Payload/iOSJailbreakDetection.app/iOSJailbreakDetection || true
+        
+        # 4. 压缩成 IPA 文件
+        zip -r iOSJailbreakDetection.ipa Payload
+        
+        # 5. 清理临时文件
+        rm -rf Payload
+        
+        echo "🎉 IPA 手动打包完成！"
+        ls -lh iOSJailbreakDetection.ipa
+
     - name: 上传 IPA 文件
       uses: actions/upload-artifact@v4
       with:
         name: iOSJailbreakDetection-unsigned
-        path: build/*.ipa
+        path: build/iOSJailbreakDetection.ipa
         retention-days: 30
-    
-    - name: 构建完成通知
-      run: |
-        echo "✅ 未签名 IPA 构建完成！"
-        echo ""
-        echo "📱 越狱设备安装指南："
-        echo "1. 确保设备已越狱并安装 AppSync Unified"
-        echo "2. 从上方 Artifacts 下载 IPA 文件"
-        echo "3. 传输到设备（可用 iCloud、AirDrop 或 SSH）"
-        echo "4. 使用 Filza 文件管理器打开 IPA 文件"
-        echo "5. 点击「安装」按钮"
-        echo "6. 等待安装完成，图标出现在主屏幕"
-        echo ""
-        echo "⚠️  注意：此 IPA 未签名，仅能在越狱设备上安装"
-        echo "📅 构建时间: $(date)"
