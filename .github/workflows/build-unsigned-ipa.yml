@@ -1,0 +1,78 @@
+name: Build Unsigned IPA for Jailbroken Devices
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: macos-13
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Select Xcode version
+      run: sudo xcode-select -s /Applications/Xcode_14.2.app/Contents/Developer
+    
+    - name: Build for iOS (arm64)
+      run: |
+        xcodebuild \
+          -project "iOSJailbreakDetection.xcodeproj" \
+          -scheme "iOSJailbreakDetection" \
+          -configuration Release \
+          -destination 'generic/platform=iOS' \
+          -archivePath "$PWD/build/iOSJailbreakDetection.xcarchive" \
+          clean archive \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+        
+        # 导出未签名的 IPA
+        xcodebuild \
+          -exportArchive \
+          -archivePath "$PWD/build/iOSJailbreakDetection.xcarchive" \
+          -exportOptionsPlist "$PWD/exportOptions.plist" \
+          -exportPath "$PWD/build" \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+    
+    - name: Create export options plist
+      run: |
+        cat > exportOptions.plist << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>provisioningProfiles</key>
+            <dict/>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>teamID</key>
+            <string></string>
+            <key>thinning</key>
+            <string>&lt;none&gt;</string>
+        </dict>
+        </plist>
+        EOF
+    
+    - name: Upload IPA artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: iOSJailbreakDetection-unsigned
+        path: build/*.ipa
+    
+    - name: Generate download link
+      run: |
+        echo "IPA 已生成！可以在 Artifacts 中下载"
+        echo "在越狱设备上安装步骤："
+        echo "1. 确保已安装 AppSync Unified"
+        echo "2. 下载 IPA 文件到设备"
+        echo "3. 使用 Filza 打开并安装"
